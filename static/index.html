@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inglês com Música</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ INÍCIO ============ -->
+<main id="home" class="screen">
+  <div class="home-top">
+    <button id="notesOpenBtn" class="btn ghost small" title="Minhas anotações"><i class="ti ti-notes"></i> Anotações <span id="notesCount" class="count">0</span></button>
+  </div>
+  <header class="hero">
+    <div class="brand-mark"><i class="ti ti-headphones"></i></div>
+    <h1>Inglês com Música</h1>
+    <p>Aprenda ouvindo músicas, cenas de filmes, séries e podcasts: o vídeo pausa a cada frase e você escreve o que ouviu.</p>
+  </header>
+
+  <ol class="howto" id="howto">
+    <li><span class="step-icon"><i class="ti ti-search"></i></span><div><b>Escolha</b><small>Busque uma música ou cole o link de um vídeo do YouTube</small></div></li>
+    <li><span class="step-icon"><i class="ti ti-headphones"></i></span><div><b>Ouça</b><small>O vídeo pausa no fim de cada frase</small></div></li>
+    <li><span class="step-icon"><i class="ti ti-keyboard"></i></span><div><b>Escreva</b><small>Digite as palavras e aprenda o significado</small></div></li>
+  </ol>
+
+  <form id="searchForm" class="search">
+    <i class="ti ti-search search-icon"></i>
+    <input id="searchInput" type="text" autocomplete="off" placeholder="Música, vídeo ou link do YouTube — ex.: Imagine Dragons Believer" autofocus>
+    <button type="button" class="btn ghost icon vk-toggle" title="Teclado virtual"><i class="ti ti-keyboard"></i></button>
+    <button type="submit" class="btn primary">Buscar</button>
+  </form>
+  <p id="searchMsg" class="msg"></p>
+  <section id="songResultsBox" hidden>
+    <h3 class="section-title"><i class="ti ti-music"></i> Músicas <small>letra sincronizada</small></h3>
+    <ul id="results" class="song-list"></ul>
+  </section>
+  <section id="videoResultsBox" hidden>
+    <h3 class="section-title"><i class="ti ti-brand-youtube"></i> Vídeos do YouTube <small>filmes, séries, podcasts: usa a legenda do vídeo</small></h3>
+    <ul id="videoResults" class="song-list"></ul>
+  </section>
+
+  <section id="setup" class="card setup" hidden>
+    <div class="setup-head">
+      <div class="cover"><i class="ti ti-music"></i></div>
+      <div class="setup-info">
+        <small class="eyebrow" id="setupEyebrow">Música escolhida</small>
+        <h2 id="setupTitle"></h2>
+      </div>
+      <button id="changeSong" class="btn ghost small"><i class="ti ti-arrows-exchange"></i> Trocar</button>
+    </div>
+
+    <div class="source">
+      <p id="audioMsg" class="msg"></p>
+      <p id="syncMsg" class="msg"></p>
+      <label class="link-btn" id="fileLink">
+        <i class="ti ti-upload"></i> Prefiro usar um arquivo de áudio ou vídeo do meu computador
+        <input id="fileInput" type="file" accept="audio/*,video/*" hidden>
+      </label>
+    </div>
+
+    <fieldset class="field">
+      <legend>Quantas palavras você quer escrever?</legend>
+      <div class="choice-cards">
+        <label class="choice">
+          <input type="radio" name="difficulty" value="easy">
+          <span class="choice-body"><i class="ti ti-plant"></i><b>Fácil</b><small>1 ou 2 palavras por frase</small></span>
+        </label>
+        <label class="choice">
+          <input type="radio" name="difficulty" value="medium">
+          <span class="choice-body"><i class="ti ti-flame"></i><b>Médio</b><small>Metade das palavras</small></span>
+        </label>
+        <label class="choice">
+          <input type="radio" name="difficulty" value="hard" checked>
+          <span class="choice-body"><i class="ti ti-trophy"></i><b>Difícil</b><small>A frase inteira</small></span>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>Velocidade da música</legend>
+      <div class="segmented" id="speedSetup">
+        <label><input type="radio" name="speedSetup" value="0.75"><span>0.75x</span></label>
+        <label><input type="radio" name="speedSetup" value="0.9"><span>0.9x</span></label>
+        <label><input type="radio" name="speedSetup" value="1" checked><span>Normal</span></label>
+      </div>
+    </fieldset>
+
+    <button id="startBtn" class="btn primary big" disabled><i class="ti ti-player-play-filled"></i> Começar a praticar</button>
+  </section>
+
+  <section id="recentBox" class="recent" hidden>
+    <h3 class="section-title"><i class="ti ti-history"></i> Tocadas recentemente</h3>
+    <ul id="recent" class="song-list"></ul>
+  </section>
+
+  <section id="finishedBox" class="recent" hidden>
+    <h3 class="section-title"><i class="ti ti-circle-check"></i> Músicas finalizadas <span id="finishedCount" class="count"></span></h3>
+    <ul id="finished" class="song-list"></ul>
+    <button id="finishedMore" class="btn ghost small more-btn" hidden></button>
+  </section>
+</main>
+
+<!-- ============ ANOTAÇÕES ============ -->
+<main id="notesScreen" class="screen" hidden>
+  <div class="topbar">
+    <button id="notesBackBtn" class="btn icon ghost" title="Voltar"><i class="ti ti-arrow-left"></i></button>
+    <div class="song-info"><strong>Minhas anotações</strong><span id="notesSub"></span></div>
+  </div>
+  <input id="notesFilter" class="filter notes-filter" type="text" autocomplete="off" placeholder="Procurar nas anotações…">
+  <ul id="notesList" class="notes-list"></ul>
+  <p id="notesEmpty" class="muted empty" hidden>Você ainda não tem anotações. Durante a prática, selecione um trecho de uma frase concluída para anotar.</p>
+</main>
+
+<!-- ============ PRÁTICA ============ -->
+<main id="practice" class="screen practice" hidden>
+  <div class="topbar">
+    <button id="backBtn" class="btn icon ghost" title="Sair"><i class="ti ti-arrow-left"></i></button>
+    <div class="song-info"><strong id="pTitle"></strong><span id="pProgress"></span></div>
+    <div class="score-chip" title="Palavras certas de primeira"><i class="ti ti-circle-check"></i><span id="pScore">0 / 0</span></div>
+    <button id="drawerBtn" class="btn icon ghost drawer-btn" title="Anotações (abre à direita)"><i class="ti ti-notes"></i><span id="drawerBadge" class="dot-count" hidden></span></button>
+    <button id="settingsBtn" class="btn icon ghost" title="Ajustes"><i class="ti ti-adjustments-horizontal"></i></button>
+  </div>
+  <div class="bar"><div id="progressFill"></div></div>
+
+  <section id="settingsPanel" class="card settings" hidden>
+    <div class="settings-row">
+      <span class="settings-label"><i class="ti ti-gauge"></i> Velocidade</span>
+      <div class="segmented small" id="speedPractice">
+        <label><input type="radio" name="speedPractice" value="0.75"><span>0.75x</span></label>
+        <label><input type="radio" name="speedPractice" value="0.9"><span>0.9x</span></label>
+        <label><input type="radio" name="speedPractice" value="1" checked><span>Normal</span></label>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label"><i class="ti ti-clock-hour-4"></i> Ajuste fino da sincronia</span>
+      <div class="stepper">
+        <button id="syncMinus1" class="btn small">−1s</button>
+        <button id="syncMinus" class="btn small">−0,25</button>
+        <strong id="syncValue">0,00s</strong>
+        <button id="syncPlus" class="btn small">+0,25</button>
+        <button id="syncPlus1" class="btn small">+1s</button>
+      </div>
+    </div>
+    <p class="settings-hint">A música pausa <b>antes</b> da frase terminar? Use <b>+</b>. Pausa depois, já na próxima frase? Use <b>−</b>.</p>
+    <div class="settings-row">
+      <span class="settings-label"><i class="ti ti-video"></i> Vídeo</span>
+      <button id="toggleVideo" class="btn small"></button>
+    </div>
+  </section>
+
+  <video id="audio" class="video" preload="auto" playsinline hidden></video>
+
+  <section class="stage">
+    <p id="prevLine" class="prev-line"></p>
+    <div id="status" class="status"></div>
+    <div id="noteAlert" class="note-alert" hidden></div>
+    <div id="line" class="line"></div>
+    <div id="clipPop" class="clip-pop" hidden></div>
+    <p id="clipHint" class="clip-hint"><i class="ti ti-click"></i> Clique numa palavra (ou selecione várias) para ouvir só esse trecho</p>
+    <p id="feedback" class="feedback"></p>
+
+    <div class="actions">
+      <button id="replayBtn" class="btn"><i class="ti ti-repeat"></i> Ouvir de novo</button>
+      <button id="hintBtn" class="btn"><i class="ti ti-bulb"></i> Dica</button>
+      <button id="checkBtn" class="btn primary"></button>
+    </div>
+    <div class="actions secondary">
+      <button type="button" class="btn ghost small vk-toggle" title="Teclado virtual"><i class="ti ti-keyboard"></i> Teclado virtual</button>
+      <button id="prevBtn" class="btn ghost small" title="Shift+Esc"><i class="ti ti-player-skip-back"></i> Frase anterior</button>
+      <button id="revealBtn" class="btn ghost small"><i class="ti ti-eye"></i> Mostrar resposta</button>
+      <button id="skipBtn" class="btn ghost small"><i class="ti ti-player-skip-forward"></i> Pular frase</button>
+    </div>
+  </section>
+
+  <p class="shortcuts">
+    <span><kbd>Enter</kbd> verificar / continuar</span>
+    <span><kbd>Espaço</kbd> próxima palavra</span>
+    <span><kbd>Esc</kbd> ouvir de novo</span>
+    <span><kbd>Shift</kbd>+<kbd>Esc</kbd> frase anterior</span>
+    <span><kbd>Ctrl</kbd>+<kbd>Espaço</kbd> dica</span>
+  </p>
+
+  <section id="explain" class="card explain" hidden>
+    <div class="panel-head">
+      <h3><i class="ti ti-book"></i> Significado da frase</h3>
+      <div class="tool-row">
+        <button id="sayBtn" class="btn small"><i class="ti ti-volume"></i> Ouvir</button>
+        <button id="saySlowBtn" class="btn small"><i class="ti ti-gauge"></i> Devagar</button>
+        <button id="noteFromExplain" class="btn small"><i class="ti ti-notes"></i> Anotar</button>
+        <button id="micBtn" class="btn small"><i class="ti ti-microphone"></i> <span>Falar e verificar</span></button>
+      </div>
+    </div>
+    <div id="micResult" class="mic-result" hidden></div>
+    <div id="exBody"></div>
+
+    <div class="ask">
+      <h4><i class="ti ti-zoom-question"></i> O que significa…?</h4>
+      <p class="ask-hint">Clique em uma palavra da frase ou digite uma palavra ou expressão.</p>
+      <div id="wordChips" class="word-chips"></div>
+      <form id="askForm" class="ask-form">
+        <input id="askInput" type="text" autocomplete="off" placeholder="Ex.: fired up">
+        <button type="submit" class="btn primary small"><i class="ti ti-search"></i> Perguntar</button>
+      </form>
+      <div id="wordResult" class="word-result" hidden></div>
+    </div>
+  </section>
+  <!-- painel lateral de anotações -->
+  <aside id="notesDrawer" class="drawer" aria-label="Anotações">
+    <div class="drawer-head">
+      <h3><i class="ti ti-notes"></i> Anotações</h3>
+      <button id="drawerClose" class="btn icon ghost" title="Fechar"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="drawer-body">
+      <h4 class="drawer-sub">Nesta frase</h4>
+      <ul id="lineNotes" class="notes-list"></ul>
+      <p id="lineNotesEmpty" class="muted drawer-empty"></p>
+
+      <h4 class="drawer-sub">Nova anotação</h4>
+      <form id="noteForm" class="note-form">
+        <input id="noteTerm" type="text" autocomplete="off" placeholder="Trecho (ex.: to have)">
+        <textarea id="noteText" rows="2" placeholder="Sua anotação (ex.: na música soa como “tuv”)"></textarea>
+        <div class="note-form-actions">
+          <span id="noteMsg" class="note-msg"></span>
+          <button type="button" id="noteCancel" class="btn ghost small" hidden>Cancelar edição</button>
+          <button type="submit" class="btn primary small"><i class="ti ti-device-floppy"></i> Salvar anotação</button>
+        </div>
+      </form>
+      <p class="ask-hint">Dica: depois de concluir a frase, selecione um trecho dela com o mouse e ele já vem preenchido aqui. A anotação aparece sempre que o trecho surgir de novo, em qualquer música ou vídeo.</p>
+
+      <h4 class="drawer-sub">Todas <span id="drawerAllCount" class="count"></span></h4>
+      <input id="drawerFilter" class="filter" type="text" autocomplete="off" placeholder="Procurar nas anotações…">
+      <ul id="drawerAll" class="notes-list"></ul>
+    </div>
+  </aside>
+</main>
+
+<!-- ============ FIM ============ -->
+<main id="done" class="screen" hidden>
+  <div class="card done">
+    <div class="done-icon"><i class="ti ti-trophy"></i></div>
+    <h1>Música concluída!</h1>
+    <div class="score-ring" id="scoreRing"><span id="finalScore"></span></div>
+    <p id="finalDetail" class="muted"></p>
+    <div id="missedBox" hidden>
+      <h3 class="section-title"><i class="ti ti-notebook"></i> Palavras para revisar</h3>
+      <ul id="missed" class="missed"></ul>
+    </div>
+    <div class="actions">
+      <button id="againBtn" class="btn primary"><i class="ti ti-repeat"></i> Praticar de novo</button>
+      <button id="otherBtn" class="btn"><i class="ti ti-music"></i> Outra música</button>
+    </div>
+  </div>
+</main>
+
+<div id="vk" class="vk" hidden aria-label="Teclado virtual"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
