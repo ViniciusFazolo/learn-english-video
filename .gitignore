@@ -1,1 +1,5 @@
 cache/**
+.venv/
+.ffmpeg/
+__pycache__/
+.vscode

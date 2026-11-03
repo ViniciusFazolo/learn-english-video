@@ -59,13 +59,56 @@ def ytdlp_cmd():
         return [exe] if exe else None
 
 
-def ytdlp_extra():
-    # Versões recentes do yt-dlp precisam de um runtime JS para o YouTube.
+_ffmpeg_path = None
+
+
+def ffmpeg_exe():
+    """ffmpeg do sistema, ou o que vem no pacote imageio-ffmpeg (funciona em Windows, Mac e Linux).
+    O yt-dlp reconhece o programa pelo nome do arquivo, então copiamos o binário do pacote
+    para .ffmpeg/ffmpeg(.exe) uma única vez."""
+    global _ffmpeg_path
+    if _ffmpeg_path and os.path.exists(_ffmpeg_path):
+        return _ffmpeg_path
+    found = shutil.which("ffmpeg")
+    if not found:
+        try:
+            import imageio_ffmpeg
+            src = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            return None
+        dest_dir = os.path.join(BASE, ".ffmpeg")
+        found = os.path.join(dest_dir, "ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+        if not os.path.exists(found) or os.path.getsize(found) != os.path.getsize(src):
+            os.makedirs(dest_dir, exist_ok=True)
+            shutil.copy2(src, found + ".tmp")
+            os.replace(found + ".tmp", found)
+            if os.name != "nt":
+                os.chmod(found, 0o755)
+    _ffmpeg_path = found
+    return found
+
+
+def js_runtime():
+    """Versões recentes do yt-dlp precisam de um runtime JS para o YouTube.
+    Usa deno/node do sistema ou o deno que vem no pacote "deno" do pip."""
     if shutil.which("deno"):
-        return []
+        return ["--js-runtimes", "deno"]
+    try:
+        import deno
+        return ["--js-runtimes", "deno:" + deno.find_deno_bin()]
+    except Exception:
+        pass
     if shutil.which("node"):
         return ["--js-runtimes", "node"]
     return []
+
+
+def ytdlp_extra():
+    extra = ["--encoding", "utf-8"] + js_runtime()
+    ff = ffmpeg_exe()
+    if ff:
+        extra += ["--ffmpeg-location", ff]
+    return extra
 
 
 def http_json(url, tries=4):
@@ -116,9 +159,9 @@ def pick_video(entries, query, duration):
 def yt_info(url):
     cmd = ytdlp_cmd()
     if not cmd:
-        raise RuntimeError("yt-dlp não está instalado. Rode ./iniciar.sh para instalar.")
+        raise RuntimeError("yt-dlp não está instalado. Abra o app pelo iniciar.py (ele instala o que falta).")
     r = subprocess.run(cmd + ytdlp_extra() + ["-J", "--no-warnings", "--no-playlist", url],
-                       capture_output=True, text=True, timeout=120)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     if r.returncode != 0:
         err = r.stderr.strip().splitlines()[-1] if r.stderr.strip() else "erro desconhecido"
         if "not a bot" in err:
@@ -132,10 +175,14 @@ def yt_download(info, out_base, audio_only=False, sub=None, height=480):
     """Baixa a partir do info já extraído (sem extrair de novo). sub = (idioma, automática?)."""
     cmd = ytdlp_cmd()
     info_path = out_base + ".info.json"
-    json.dump(info, open(info_path, "w"))
+    json.dump(info, open(info_path, "w", encoding="utf-8"))
     # Áudio AAC (mp4a): o YouTube às vezes oferece Dolby (E-AC3), que o navegador não toca.
     aud = "ba[acodec^=mp4a]/ba[acodec=opus]/ba[acodec!=eac3][acodec!=ac3]"
     vid = f"bv*[height<={height}][vcodec^=avc1]/bv*[height<={height}][ext=mp4]"
+    if not audio_only and not ffmpeg_exe():
+        # O YouTube entrega vídeo e áudio separados; sem ffmpeg o yt-dlp não junta e o navegador não toca.
+        raise RuntimeError("o ffmpeg não foi encontrado. Feche o app e abra de novo pelo iniciar.py "
+                           "(ele instala o que falta)")
     fmt = aud if audio_only else f"({vid})+({aud})/b[height<={height}][acodec^=mp4a]/b[height<={height}]"
     args = cmd + ytdlp_extra() + ["--load-info-json", info_path, "-f", fmt, "--no-warnings",
                                   "-o", out_base + ".%(ext)s", "--print", "after_move:filepath"]
@@ -145,7 +192,7 @@ def yt_download(info, out_base, audio_only=False, sub=None, height=480):
         args += ["--write-auto-subs" if sub[1] else "--write-subs", "--sub-langs", sub[0],
                  "--sub-format", "json3", "-o", "subtitle:" + out_base + ".sub.%(ext)s"]
     try:
-        dl = subprocess.run(args, capture_output=True, text=True, timeout=1800)
+        dl = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
     finally:
         os.remove(info_path)
     if dl.returncode != 0:
@@ -166,9 +213,9 @@ def yt_search(query, n=6):
         return _search_cache[key]
     cmd = ytdlp_cmd()
     if not cmd:
-        raise RuntimeError("yt-dlp não está instalado. Rode ./iniciar.sh para instalar.")
+        raise RuntimeError("yt-dlp não está instalado. Abra o app pelo iniciar.py (ele instala o que falta).")
     r = subprocess.run(cmd + ytdlp_extra() + ["-J", "--flat-playlist", "--no-warnings", f"ytsearch{n}:{query}"],
-                       capture_output=True, text=True, timeout=90)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90)
     if r.returncode != 0:
         raise RuntimeError("Falha ao buscar no YouTube: " + r.stderr.strip()[-400:])
     out = []
@@ -197,7 +244,7 @@ def download_audio(query, duration, vid=""):
     with lock:
         meta_path = os.path.join(CACHE, key + ".json")
         if os.path.exists(meta_path):
-            meta = json.load(open(meta_path))
+            meta = json.load(open(meta_path, encoding="utf-8"))
             if os.path.exists(os.path.join(CACHE, meta["file"])):
                 return meta
         if not re.fullmatch(r"[\w-]{11}", vid or ""):
@@ -207,7 +254,7 @@ def download_audio(query, duration, vid=""):
         path = yt_download(info, os.path.join(CACHE, key))
         meta = {"file": os.path.basename(path), "title": info.get("title"),
                 "duration": info.get("duration"), "youtube": url, "thumb": thumb(vid)}
-        json.dump(meta, open(meta_path, "w"))
+        json.dump(meta, open(meta_path, "w", encoding="utf-8"))
         return meta
 
 
@@ -317,7 +364,7 @@ def download_video(vid):
     with lock:
         meta_path = os.path.join(CACHE, key + ".json")
         if os.path.exists(meta_path):
-            meta = json.load(open(meta_path))
+            meta = json.load(open(meta_path, encoding="utf-8"))
             if os.path.exists(os.path.join(CACHE, meta["file"])):
                 return meta
         info = yt_info("https://www.youtube.com/watch?v=" + vid)
@@ -343,7 +390,7 @@ def download_video(vid):
                 "channel": info.get("channel") or info.get("uploader") or "", "duration": dur,
                 "thumb": thumb(vid), "subs": "auto" if sub[1] else "manual", "audioOnly": False,
                 "lines": lines}
-        json.dump(meta, open(meta_path, "w"), ensure_ascii=False)
+        json.dump(meta, open(meta_path, "w", encoding="utf-8"), ensure_ascii=False)
         return meta
 
 
@@ -363,7 +410,7 @@ def envelope(path):
     único do que só o volume geral, evitando confundir partes repetidas da música."""
     import numpy as np
     sr, nfft, hop = 8000, 512, int(8000 * FRAME)
-    r = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-ac", "1", "-ar", str(sr), "-f", "f32le", "-"],
+    r = subprocess.run([ffmpeg_exe() or "ffmpeg", "-v", "error", "-i", path, "-ac", "1", "-ar", str(sr), "-f", "f32le", "-"],
                        capture_output=True, timeout=180)
     if r.returncode != 0:
         raise RuntimeError("ffmpeg falhou: " + r.stderr.decode(errors="ignore")[-200:])
@@ -462,19 +509,19 @@ def align(artist, track, duration, video_file):
     key = hashlib.sha1(f"align5:{video_file}:{artist}:{track}".lower().encode()).hexdigest()[:16]
     meta_path = os.path.join(CACHE, key + ".align.json")
     if os.path.exists(meta_path):
-        return json.load(open(meta_path))
+        return json.load(open(meta_path, encoding="utf-8"))
     video_meta = os.path.join(CACHE, os.path.splitext(os.path.basename(video_file))[0] + ".json")
-    video_id = json.load(open(video_meta)).get("youtube", "").split("v=")[-1] if os.path.exists(video_meta) else ""
+    video_id = json.load(open(video_meta, encoding="utf-8")).get("youtube", "").split("v=")[-1] if os.path.exists(video_meta) else ""
     with _locks_guard:
         lock = _locks.setdefault(key, threading.Lock())
     with lock:
         if os.path.exists(meta_path):
-            return json.load(open(meta_path))
+            return json.load(open(meta_path, encoding="utf-8"))
         extra = ytdlp_extra()
         entries, seen = [], {video_id}
         for q in (f"{artist} {track}", f"{artist} {track} audio"):
             search = subprocess.run(cmd + extra + ["-J", "--flat-playlist", "--no-warnings", f"ytsearch10:{q}"],
-                                    capture_output=True, text=True, timeout=90)
+                                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90)
             if search.returncode != 0:
                 continue
             for e in json.loads(search.stdout).get("entries") or []:
@@ -489,7 +536,7 @@ def align(artist, track, duration, video_file):
             dl = subprocess.run(cmd + extra + ["-f", "bestaudio", "--no-playlist", "--no-warnings", "-o", out,
                                                "--print", "after_move:filepath",
                                                "https://www.youtube.com/watch?v=" + ref["id"]],
-                                capture_output=True, text=True, timeout=300)
+                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
             if dl.returncode != 0:
                 continue
             ref_path = dl.stdout.strip().splitlines()[-1]
@@ -506,13 +553,13 @@ def align(artist, track, duration, video_file):
                 offs = sorted(o for _, o in mapping)
                 result = {"offset": offs[len(offs) // 2], "map": mapping, "agree": round(frac, 2),
                           "similarity": round(sim, 2), "reference": ref.get("title")}
-                json.dump(result, open(meta_path, "w"))
+                json.dump(result, open(meta_path, "w", encoding="utf-8"))
                 return result
         raise RuntimeError("nenhuma versão de referência bateu com o vídeo (" + "; ".join(tried) + ")")
 
 
 EXPLAIN_FILE = os.path.join(CACHE, "explicacoes.json")
-_explain_cache = json.load(open(EXPLAIN_FILE)) if os.path.exists(EXPLAIN_FILE) else {}
+_explain_cache = json.load(open(EXPLAIN_FILE, encoding="utf-8")) if os.path.exists(EXPLAIN_FILE) else {}
 _explain_guard = threading.Lock()
 _claude_slots = threading.Semaphore(2)
 
@@ -550,7 +597,7 @@ def run_claude(prompt):
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
     with _claude_slots:
         r = subprocess.run([exe, "-p", "--model", "haiku", "--tools", ""], input=prompt,
-                           capture_output=True, text=True, timeout=90, cwd=CACHE, env=env)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, cwd=CACHE, env=env)
     out = r.stdout
     if r.returncode != 0 or "{" not in out:
         raise RuntimeError((r.stderr or out).strip()[-300:])
@@ -586,7 +633,7 @@ def explain(text, prev, artist, track):
         if data.get("fonte") == "claude":
             with _explain_guard:
                 _explain_cache[key] = data
-                json.dump(_explain_cache, open(EXPLAIN_FILE, "w"), ensure_ascii=False)
+                json.dump(_explain_cache, open(EXPLAIN_FILE, "w", encoding="utf-8"), ensure_ascii=False)
         return data
 
 
@@ -607,7 +654,7 @@ def word_meaning(word, line, artist, track):
         if data.get("fonte") == "claude":
             with _explain_guard:
                 _explain_cache[key] = data
-                json.dump(_explain_cache, open(EXPLAIN_FILE, "w"), ensure_ascii=False)
+                json.dump(_explain_cache, open(EXPLAIN_FILE, "w", encoding="utf-8"), ensure_ascii=False)
         return data
 
 
@@ -752,6 +799,11 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):  # console do Windows pode não aceitar emoji/acentos
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     url = f"http://127.0.0.1:{PORT}/"
     print(f"🎧 Inglês com Música rodando em {url}  (Ctrl+C para sair)")
