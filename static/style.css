@@ -104,6 +104,15 @@ kbd {
 .howto b { display: block; font-size: .95rem; }
 .howto small { color: var(--muted); font-size: .82rem; line-height: 1.35; display: block; }
 @media (max-width: 680px) { .howto { grid-template-columns: 1fr; } }
+.help-fab { position: fixed; right: 20px; bottom: 20px; z-index: 20; width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center; font-size: 1.2rem; color: var(--accent-text); background: var(--surface-2); border: 1px solid var(--border-strong); }
+.help-fab:hover { background: var(--surface-3); }
+.ai-help { position: fixed; inset: auto 20px 74px auto; margin: 0; width: min(360px, calc(100vw - 40px)); max-height: calc(100vh - 100px); overflow: auto; padding: 16px 18px;
+  color: var(--muted); font-size: .9rem; line-height: 1.45; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 14px; }
+.ai-help h3 { margin: 0; color: var(--text); font-size: 1rem; }
+.ai-help p, .ai-help ul { margin: 8px 0 0; }
+.ai-help ul { padding-left: 20px; }
+.ai-help a { color: var(--accent-text); }
 
 .search {
   position: relative; display: flex; gap: 8px; padding: 6px; border-radius: 14px;

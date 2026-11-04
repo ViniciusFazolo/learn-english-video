@@ -1049,7 +1049,7 @@ async function showExplain() {
     html += `<h4 class="sub-title">${ICON("message-circle")} No dia a dia</h4><ul class="ex-list">` + d.exemplos.map((x, k) =>
       `<li><button class="say-btn" data-say="${k}" title="Ouvir">${ICON("volume")}</button><div><div class="en">${escapeHtml(x.en)}</div><div class="pt">${escapeHtml(x.pt)}</div></div></li>`).join("") + "</ul>";
   }
-  if (d.fonte === "mymemory") html += `<p class="loading-line">${ICON("info-circle")} Só a tradução está disponível agora (explicação e exemplos precisam do Claude Code instalado).</p>`;
+  if (d.fonte === "mymemory") html += `<p class="loading-line">${ICON("info-circle")} Só a tradução está disponível agora (explicação e exemplos precisam do Claude Code ou do OpenCode instalado).</p>`;
   box.innerHTML = html;
   box.querySelectorAll("[data-say]").forEach((b) => (b.onclick = () => speak(d.exemplos[+b.dataset.say].en)));
 }
@@ -1097,6 +1097,7 @@ async function askWord(word, chip) {
     ${d.pronuncia ? `<span class="w-pron">/${escapeHtml(d.pronuncia)}/</span>` : ""}
     ${d.classe ? `<span class="w-class">${escapeHtml(d.classe)}</span>` : ""}</div>
     <p class="w-mean">${escapeHtml(d.significado || "")}</p>`;
+  if (d.fonte === "mymemory") html += `<p class="loading-line">${ICON("info-circle")} Tradução da palavra isolada: pode não ser o sentido usado nesta frase (o significado no contexto precisa do Claude Code ou do OpenCode instalado).</p>`;
   if (d.nota) html += `<p class="w-note">${ICON("bulb")}<span>${escapeHtml(d.nota)}</span></p>`;
   if (d.outros?.length) html += `<p class="w-other">Também pode significar: ${d.outros.map(escapeHtml).join(" · ")}</p>`;
   if (d.exemplos?.length) html += '<ul class="ex-list">' + d.exemplos.map((x, k) =>

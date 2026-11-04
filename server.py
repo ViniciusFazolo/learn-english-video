@@ -563,6 +563,17 @@ _explain_cache = json.load(open(EXPLAIN_FILE, encoding="utf-8")) if os.path.exis
 _explain_guard = threading.Lock()
 _claude_slots = threading.Semaphore(2)
 
+# O OpenCode é um agente e o texto das legendas vem de fora: sem isto ele edita arquivos e roda comandos
+# sozinho, mesmo sem --auto. Negar tudo não serve, pois os modelos grátis recusam pedidos sem ferramentas.
+# Sobra só leitura dentro de OPENCODE_DIR, uma pasta vazia.
+OPENCODE_CONFIG = json.dumps({"permission": {tool: "deny" for tool in (
+    "bash", "edit", "write", "patch", "webfetch", "websearch", "codesearch",
+    "task", "skill", "external_directory", "doom_loop")}})
+OPENCODE_DIR = os.path.join(CACHE, "opencode")
+OPENCODE_TIMEOUT = 40
+OPENCODE_COOLDOWN = 600  # depois de uma falha, evita fazer o aluno esperar o timeout a cada frase
+_opencode_retry_at = 0
+
 PROMPT = """Você é um professor de inglês para brasileiros. Abaixo há uma frase de "{track}" ({artist}), que pode ser uma música, filme, série ou podcast.
 Frase anterior (contexto): "{prev}"
 FRASE: "{text}"
@@ -590,6 +601,14 @@ Responda SOMENTE com um JSON válido, sem markdown, neste formato:
 Use de 0 a 3 itens em "outros" e exatamente 2 itens em "exemplos". Se o termo não estiver na frase, explique o sentido mais comum."""
 
 
+def parse_ai_json(out, result, source):
+    if result.returncode != 0 or "{" not in out:
+        raise RuntimeError((result.stderr or out).strip()[-300:])
+    data = json.loads(out[out.index("{"): out.rindex("}") + 1])
+    data["fonte"] = source
+    return data
+
+
 def run_claude(prompt):
     exe = shutil.which("claude")
     if not exe:
@@ -598,23 +617,60 @@ def run_claude(prompt):
     with _claude_slots:
         r = subprocess.run([exe, "-p", "--model", "haiku", "--tools", ""], input=prompt,
                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, cwd=CACHE, env=env)
-    out = r.stdout
-    if r.returncode != 0 or "{" not in out:
-        raise RuntimeError((r.stderr or out).strip()[-300:])
-    data = json.loads(out[out.index("{"): out.rindex("}") + 1])
-    data["fonte"] = "claude"
+    return parse_ai_json(r.stdout, r, "claude")
+
+
+def run_opencode(prompt):
+    global _opencode_retry_at
+    exe = shutil.which("opencode")
+    if not exe:
+        raise RuntimeError("opencode não encontrado")
+    if time.time() < _opencode_retry_at:
+        raise RuntimeError("opencode falhou há pouco, aguardando para tentar de novo")
+    os.makedirs(OPENCODE_DIR, exist_ok=True)
+    cmd = [exe, "run", "--pure", "--format", "json", "--title", "traducao", "--dir", OPENCODE_DIR]
+    if os.environ.get("OPENCODE_MODEL"):
+        cmd += ["-m", os.environ["OPENCODE_MODEL"]]
+    # PWD também: sem isso o opencode trabalha na pasta do servidor, não em OPENCODE_DIR
+    env = {**os.environ, "OPENCODE_CONFIG_CONTENT": OPENCODE_CONFIG, "PWD": OPENCODE_DIR}
+    try:
+        with _claude_slots:
+            # Em erro de API (ex.: limite do plano grátis) o opencode fica parado sem sair: só o timeout resolve
+            r = subprocess.run(cmd + [prompt], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=OPENCODE_TIMEOUT, cwd=OPENCODE_DIR, env=env)
+        events = [json.loads(line) for line in r.stdout.splitlines() if line.startswith("{")]
+        text = "".join(e["part"].get("text", "") for e in events if e.get("type") == "text")
+        return parse_ai_json(text, r, "opencode")
+    except Exception:
+        _opencode_retry_at = time.time() + OPENCODE_COOLDOWN
+        raise
+
+
+def run_ai(prompt, required):
+    """Claude primeiro, OpenCode em segundo. Se os dois falharem, quem chamou usa o MyMemory."""
+    try:
+        return run_claude(prompt)
+    except Exception as e:
+        print("Claude falhou, tentando o OpenCode:", e)
+    data = run_opencode(prompt)
+    if not data.get(required):  # não deixa uma resposta incompleta ir para o cache
+        raise RuntimeError("OpenCode devolveu uma resposta incompleta")
     return data
 
 
-def claude_explain(text, prev, artist, track):
-    return run_claude(PROMPT.format(text=text, prev=prev, artist=artist, track=track))
+def ai_explain(text, prev, artist, track):
+    return run_ai(PROMPT.format(text=text, prev=prev, artist=artist, track=track), "traducao")
 
 
 def mymemory_translate(text):
     url = ("https://api.mymemory.translated.net/get?langpair=en|pt-BR&q="
            + urllib.parse.quote(text))
     d = http_json(url, tries=2)
-    return {"traducao": d["responseData"]["translatedText"], "explicacao": "",
+    translated = d["responseData"]["translatedText"]
+    # Com a cota esgotada, o aviso da API vem no lugar da tradução (às vezes até com status 200)
+    if str(d.get("responseStatus")) != "200" or translated.upper().startswith("MYMEMORY WARNING"):
+        raise RuntimeError("MyMemory indisponível: " + translated[:120])
+    return {"traducao": translated, "explicacao": "",
             "expressoes": [], "exemplos": [], "fonte": "mymemory"}
 
 
@@ -626,11 +682,11 @@ def explain(text, prev, artist, track):
         if key in _explain_cache:
             return _explain_cache[key]
         try:
-            data = claude_explain(text, prev, artist, track)
+            data = ai_explain(text, prev, artist, track)
         except Exception as e:
-            print("Explicação via Claude falhou, usando só tradução:", e)
+            print("Explicação via IA falhou, usando só tradução:", e)
             data = mymemory_translate(text)
-        if data.get("fonte") == "claude":
+        if data.get("fonte") in ("claude", "opencode"):
             with _explain_guard:
                 _explain_cache[key] = data
                 json.dump(_explain_cache, open(EXPLAIN_FILE, "w", encoding="utf-8"), ensure_ascii=False)
@@ -646,12 +702,12 @@ def word_meaning(word, line, artist, track):
         if key in _explain_cache:
             return _explain_cache[key]
         try:
-            data = run_claude(WORD_PROMPT.format(word=word, line=line, artist=artist, track=track))
+            data = run_ai(WORD_PROMPT.format(word=word, line=line, artist=artist, track=track), "significado")
         except Exception as e:
-            print("Significado da palavra via Claude falhou, usando só tradução:", e)
+            print("Significado da palavra via IA falhou, usando só tradução:", e)
             t = mymemory_translate(word)
             data = {"termo": word, "significado": t["traducao"], "fonte": "mymemory"}
-        if data.get("fonte") == "claude":
+        if data.get("fonte") in ("claude", "opencode"):
             with _explain_guard:
                 _explain_cache[key] = data
                 json.dump(_explain_cache, open(EXPLAIN_FILE, "w", encoding="utf-8"), ensure_ascii=False)
