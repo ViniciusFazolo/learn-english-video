@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Servidor local do app "Inglês com Música".
+"""Servidor local do app "Inglês com Vídeo".
 
 - Serve a interface (pasta static/)
 - /api/status            -> informa se o yt-dlp está disponível
@@ -25,7 +25,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(BASE, "static")
 CACHE = os.path.join(BASE, "cache")
 PORT = int(os.environ.get("PORT", "8765"))
-UA = "InglesComMusica/1.0 (app local de estudo)"
+UA = "InglesComVideo/1.0 (app local de estudo)"
 
 os.makedirs(CACHE, exist_ok=True)
 DATA = os.path.join(BASE, "dados")  # dados do usuário (não é cache: não apagar)
@@ -806,7 +806,7 @@ def main():
             pass
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     url = f"http://127.0.0.1:{PORT}/"
-    print(f"🎧 Inglês com Música rodando em {url}  (Ctrl+C para sair)")
+    print(f"🎧 Inglês com Vídeo rodando em {url}  (Ctrl+C para sair)")
     if not ytdlp_cmd():
         print("⚠️  yt-dlp não encontrado: só será possível usar arquivos de áudio do computador.")
     if os.environ.get("NO_BROWSER") != "1":

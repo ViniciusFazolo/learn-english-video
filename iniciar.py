@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inicia o app "Inglês com Música" em qualquer sistema. É o único arquivo que você precisa abrir.
+"""Inicia o app "Inglês com Vídeo" em qualquer sistema. É o único arquivo que você precisa abrir.
 
   Windows:      dois cliques neste arquivo (iniciar.py)
   Mac / Linux:  no terminal, dentro desta pasta:  python3 iniciar.py
