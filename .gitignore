@@ -3,3 +3,5 @@ cache/**
 .ffmpeg/
 __pycache__/
 .vscode
+dados/
+console_error.log
