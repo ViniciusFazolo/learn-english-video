@@ -957,7 +957,7 @@ function playClip(i, j, slow = false) {
   clip = { end: b + off(b), resume: audio.currentTime, rate: audio.playbackRate, i, j, slow };
   S.reachedEnd = true; // não deixa o laço da frase interferir
   audio.currentTime = a + off(a);
-  audio.playbackRate = slow ? 0.6 : clip.rate;
+  audio.playbackRate = slow ? Math.min(0.6, clip.rate) : clip.rate;
   audio.volume = 0;
   fadeInStart = performance.now();
   L.tokens.forEach((tk, k) => tk.span.classList.toggle("playing", k >= i && k <= j));
