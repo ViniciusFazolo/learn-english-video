@@ -201,6 +201,7 @@ function chooseSong(song) {
   $("#howto").hidden = true;
   $("#setupTitle").textContent = songTitle(song);
   $("#startBtn").disabled = true;
+  updateResume();
   $("#setup").scrollIntoView({ behavior: "smooth" });
   if (S.ytdlp) (song.kind === "video" ? fetchVideo : fetchAudio)();
   else if (song.kind === "video") setMsg($("#audioMsg"), "Para usar vídeos do YouTube é preciso o yt-dlp (rode ./iniciar.sh).", "err");
@@ -334,15 +335,45 @@ function setBest(pct) {
 }
 function renderRecent() {
   const list = load("recent", []).slice(0, 5);
+  const progress = load("progress", {});
   $("#recentBox").hidden = !list.length;
   const ul = $("#recent");
   ul.innerHTML = "";
   for (const s of list) {
     const li = document.createElement("li");
-    li.innerHTML = `${thumbHtml(s, s.kind === "video" ? "brand-youtube" : "music")}<div class="s-main"><div class="t">${escapeHtml(s.track)}</div><div class="a">${escapeHtml(s.artist)}</div></div>${s.best != null ? `<span class="badge">Recorde ${s.best}%</span>` : ""}<span class="go">${ICON("chevron-right")}</span>`;
+    li.innerHTML = `${thumbHtml(s, s.kind === "video" ? "brand-youtube" : "music")}<div class="s-main"><div class="t">${escapeHtml(s.track)}</div><div class="a">${escapeHtml(s.artist)}</div></div>${progress[s.key] ? `<span class="badge progress">Frase ${progress[s.key].idx + 1} de ${progress[s.key].total}</span>` : ""}${s.best != null ? `<span class="badge">Recorde ${s.best}%</span>` : ""}<span class="go">${ICON("chevron-right")}</span>`;
     li.onclick = () => chooseSong(s);
     ul.appendChild(li);
   }
+}
+
+/* ---------------- progresso salvo ---------------- */
+function saveProgress(idx) {
+  const all = load("progress", {});
+  const results = {};
+  S.lines.forEach((l, i) => { if (l.result) results[i] = l.result; });
+  if (!idx && !Object.keys(results).length) delete all[S.song.key];
+  else all[S.song.key] = { idx: Math.min(idx, S.lines.length - 1), total: S.lines.length, results, hints: S.stats.hints,
+                           difficulty: S.difficulty, speed: document.querySelector('input[name="speedSetup"]:checked').value };
+  save("progress", all);
+  renderRecent();
+}
+function clearProgress() {
+  const all = load("progress", {});
+  delete all[S.song.key];
+  save("progress", all);
+  renderRecent();
+}
+// Mostra "Continuar" na tela de escolha quando esta música/vídeo tem progresso salvo.
+function updateResume() {
+  const p = S.song && load("progress", {})[S.song.key];
+  S.resume = p || null;
+  $("#restartLink").hidden = !p;
+  $("#startBtn").innerHTML = ICON("player-play-filled") + (p ? ` Continuar da frase ${p.idx + 1} de ${p.total}` : " Começar a praticar");
+  if (!p) return;
+  const pick = (name, value) => { const el = document.querySelector(`input[name="${name}"][value="${value}"]`); if (el) el.checked = true; };
+  pick("difficulty", p.difficulty);
+  pick("speedSetup", p.speed);
 }
 
 /* ---------------- músicas finalizadas ---------------- */
@@ -393,14 +424,24 @@ function startPractice() {
   });
   if (!S.lines.length) { alert("Essa letra não tem frases utilizáveis."); return; }
   S.stats = { ok: 0, total: 0, missed: [], hints: 0 };
+  // Se as frases mudaram desde que o progresso foi salvo, ele não vale mais.
+  const resume = S.resume?.total === S.lines.length ? S.resume : null;
+  S.resume = null;
+  if (resume) {
+    for (const [i, r] of Object.entries(resume.results)) S.lines[i].result = r;
+    S.stats.hints = resume.hints || 0;
+    recountStats();
+  }
   $("#pTitle").textContent = songTitle(S.song);
   $("#prevLine").textContent = "";
   setSpeed(document.querySelector('input[name="speedSetup"]:checked').value);
   updateSync();
   show("practice");
   openDrawer(load("drawerOpen", false));
-  audio.currentTime = 0;
-  goLine(0);
+  const first = resume ? resume.idx : 0;
+  const L = S.lines[first];
+  audio.currentTime = first ? Math.max(0, L.start + off(L.start) - 0.3) : 0;
+  goLine(first);
 }
 
 function goLine(i) {
@@ -556,6 +597,7 @@ function finishLine() {
   const ok = blanks.filter((t) => t.result === "ok").length;
   L.result = { ok, total: blanks.length, missed: blanks.filter((t) => t.result !== "ok").map((t) => ({ word: t.core, line: L.text })) };
   recountStats();
+  saveProgress(S.idx + 1);
   const fb = $("#feedback");
   if (ok === blanks.length) { fb.className = "feedback ok"; fb.innerHTML = ICON("circle-check") + `<span>${["Perfeito!", "Mandou bem!", "Isso aí!", "Excelente!"][Math.floor(Math.random() * 4)]}</span>`; }
   else { fb.className = "feedback warn"; fb.innerHTML = ICON("alert-circle") + `<span>De primeira você acertou ${ok} de ${blanks.length}. As respostas estão em amarelo.</span>`; }
@@ -588,6 +630,7 @@ function prevLine() {
   audio.pause();
   audio.currentTime = Math.max(0, L.start + off(L.start) - 0.3);
   goLine(S.idx - 1);
+  saveProgress(S.idx);
 }
 
 function replay() {
@@ -704,6 +747,8 @@ function finish() {
   $("#missedBox").hidden = !seen.size;
   setBest(pct);
   addFinished(pct);
+  clearProgress();
+  updateResume();
   show("done");
 }
 
@@ -1237,13 +1282,18 @@ $("#settingsBtn").onclick = () => { $("#settingsPanel").hidden = !$("#settingsPa
 $("#searchForm").onsubmit = (e) => { e.preventDefault(); const q = $("#searchInput").value.trim(); if (q) search(q); };
 $("#changeSong").onclick = () => { $("#setup").hidden = true; $("#howto").hidden = false; S.song = null; audio.pause(); $("#searchInput").focus(); };
 $("#startBtn").onclick = startPractice;
+$("#restartLink").onclick = () => {
+  S.resume = null;
+  $("#restartLink").hidden = true;
+  $("#startBtn").innerHTML = ICON("player-play-filled") + " Começar a praticar";
+};
 $("#checkBtn").onclick = check;
 $("#replayBtn").onclick = replay;
 $("#hintBtn").onclick = hint;
 $("#skipBtn").onclick = skip;
 $("#prevBtn").onclick = prevLine;
 $("#revealBtn").onclick = () => { if (S.phase !== "checked") { openInputs().forEach(reveal); finishLine(); } };
-$("#backBtn").onclick = () => { stopClip(false); hideClipPop(); audio.pause(); stopVoice(); S.phase = "idle"; $("#settingsPanel").hidden = true; show("home"); };
+$("#backBtn").onclick = () => { stopClip(false); hideClipPop(); audio.pause(); stopVoice(); S.phase = "idle"; $("#settingsPanel").hidden = true; updateResume(); show("home"); };
 $("#againBtn").onclick = () => startPractice();
 $("#notesOpenBtn").onclick = () => { renderNotesHome(); show("notesScreen"); $("#notesFilter").focus(); };
 $("#notesBackBtn").onclick = () => show("home");

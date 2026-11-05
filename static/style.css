@@ -138,6 +138,7 @@ kbd {
 .song-list .a { color: var(--muted); font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .song-list .d { color: var(--faint); font-size: .85rem; white-space: nowrap; }
 .song-list .badge { font-size: .8rem; font-weight: 600; color: var(--ok); background: var(--ok-soft); padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+.song-list .badge.progress { color: var(--accent-text); background: var(--accent-soft); }
 .song-list .go { color: var(--faint); }
 .song-list li:hover .go { color: var(--accent-text); }
 
@@ -160,6 +161,7 @@ kbd {
 .source .msg { margin: 0 0 8px; }
 .link-btn { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .88rem; cursor: pointer; }
 .link-btn:hover { color: var(--accent-text); text-decoration: underline; }
+.restart-link { display: flex; margin: 12px auto 0; background: none; border: 0; font: inherit; font-size: .88rem; }
 
 .field { border: none; padding: 0; margin: 20px 0 0; }
 .field legend { font-weight: 600; margin-bottom: 10px; padding: 0; }
